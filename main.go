@@ -24,7 +24,7 @@ type Client struct {
 
 type Ch struct {
 	JoinChan   chan *Client       //用户加入通道
-	ExitChan   chan *Client       //用户退出出通道
+	ExitChan   chan *Client       //用户退出通道
 	MsgChan    chan string        //消息通道
 	ClientList map[string]*Client //客户端用户列表
 }
