@@ -1,1 +1,1 @@
-安装 go get github.com/gorilla/websocket
+码代码之前先安装 go get github.com/gorilla/websocket
