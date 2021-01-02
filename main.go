@@ -128,5 +128,5 @@ func main() {
 	http.HandleFunc("/ws", handler)
 	http.Handle("/", http.FileServer(http.Dir("")))
 	fmt.Println("http://localhost:" + port)
-	http.ListenAndServe(":"+port, nil)
+	_ = http.ListenAndServe(":"+port, nil)
 }
