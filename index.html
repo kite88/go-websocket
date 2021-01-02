@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>websocket</title>
+</head>
+<body>
+<div id="msg">
+
+</div>
+<form action="">
+    我的uid:<input type="text" value="" id="uid" disabled><br><br>
+    接收人uid：<input type="text" value="" id="to_uid"><br>
+    发送内容:<input type="text" id="content" value="">
+    <input type="button" value="发送" id="send">
+</form>
+</body>
+<script>
+
+    const msgBox = document.getElementById('msg')
+    const sendBtn = document.getElementById('send')
+    const contentInput = document.getElementById('content')
+    const uidInput = document.getElementById('uid')
+    const toUidInput = document.getElementById('to_uid')
+
+    window.onload = function () {
+        var uid = new Date().getTime()
+        uidInput.value = uid
+        var websocket;
+        websocket = new WebSocket("ws://127.0.0.1:8090/ws?uid=" + uid)
+        websocket.onopen = function (e) {
+            console.log("connected", e);
+            msgBox.innerHTML = '<li>连接成功</li>'
+        }
+        websocket.onmessage = function (e) {
+            console.log("收到信息：", e);
+            msgBox.innerHTML += '<li>' +  e.data + '</li>'
+        }
+        websocket.onclose = function (e) {
+            console.log("closed", e);
+        }
+        //发送信息
+        sendBtn.onclick = function () {
+            if (!toUidInput.value) {
+                alert('请输入接收人uid');
+                return
+            }
+            if (!contentInput.value) {
+                alert('请输入发送内容');
+                return
+            }
+            var message = JSON.stringify({
+                receiver: toUidInput.value,
+                content: contentInput.value
+            })
+            websocket.send(message)
+        }
+    }
+</script>
+</html>
