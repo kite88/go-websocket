@@ -2,6 +2,9 @@
 /go-websocket
 /go-websocket.exe
 
+# 发布构建产物
+/dist/
+
 # 配置文件：仓库只提交各环境的模板，本地复制成 env.ini 覆盖即可
 /config/env.ini
 
