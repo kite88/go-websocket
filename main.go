@@ -1,132 +1,152 @@
+// Command go-websocket 是一个把「点对点消息投递」做完整的小型 WebSocket 服务：
+// 浏览器用 uid 连上来，服务端按消息里的 receiver 精准投递，页面与静态资源
+// 全部内嵌在二进制里。
+//
+// 用法示例：
+//
+//	go-websocket                  # 使用内嵌的 release 配置
+//	go-websocket -config env.ini  # 指定外部配置文件
+//	go-websocket -version         # 打印版本号
 package main
 
 import (
-	"encoding/json"
+	"context"
+	"embed"
+	"errors"
+	"flag"
 	"fmt"
-	"github.com/gorilla/websocket"
 	"log"
+	"net"
 	"net/http"
-	"strings"
+	"os"
+	"os/signal"
+	"syscall"
+	"time"
+
+	"github.com/gin-gonic/gin"
+
+	"go-websocket/config"
+	"go-websocket/handle"
+	"go-websocket/router"
 )
 
-var upgrader = websocket.Upgrader{
-	ReadBufferSize:  1024,
-	WriteBufferSize: 1024,
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
-}
+// version 由构建脚本用 -ldflags "-X main.version=..." 注入，源码运行时为 dev。
+var version = "dev"
 
-type Client struct {
-	ID   string
-	Conn *websocket.Conn
-}
-
-type Ch struct {
-	JoinChan   chan *Client       //用户加入通道
-	ExitChan   chan *Client       //用户退出通道
-	MsgChan    chan string        //消息通道
-	ClientList map[string]*Client //客户端用户列表
-}
-
-var AllCh = Ch{
-	JoinChan:   make(chan *Client),
-	ExitChan:   make(chan *Client),
-	MsgChan:    make(chan string),
-	ClientList: make(map[string]*Client),
-}
-
-type MsgContent struct {
-	Sender   string `json:"sender"`   //发送者
-	Receiver string `json:"receiver"` //接收者
-	Content  string `json:"content"`  //消息内容
-}
-
-func (ch *Ch) Start() {
-	for ; ; {
-		select {
-		case v := <-ch.JoinChan:
-			log.Println("用户加入", v.ID)
-			AllCh.ClientList[v.ID] = v
-		case v := <-ch.ExitChan:
-			log.Println("用户退出", v.ID)
-			delete(AllCh.ClientList, v.ID)
-		case v := <-ch.MsgChan:
-			var msgContent MsgContent
-			_ = json.Unmarshal([]byte(v), &msgContent)
-			for id, conn := range AllCh.ClientList {
-				if id == msgContent.Receiver {
-					conn.WriteMsg(v)
-				}
-			}
-		}
-	}
-}
-
-func (c *Client) ReadMsg() {
-	defer func() {
-		AllCh.ExitChan <- c
-		_ = c.Conn.Close()
-	}()
-	for ; ; {
-		_, p, err := c.Conn.ReadMessage()
-		if err != nil {
-			break
-		}
-		var msgContent MsgContent
-		_ = json.Unmarshal(p, &msgContent)
-		msgContent.Sender = c.ID
-		message, _ := json.Marshal(msgContent)
-		log.Println("读取到客户端的信息:", string(message))
-		AllCh.MsgChan <- string(message)
-	}
-}
-
-func (c *Client) WriteMsg(message string) {
-	err := c.Conn.WriteMessage(websocket.TextMessage, []byte(message))
-	if err != nil {
-		log.Println(err)
-	}
-	log.Println("发送到客户端的信息:", message)
-}
-
-func handler(w http.ResponseWriter, r *http.Request) {
-	go AllCh.Start()
-
-	conn, err := upgrader.Upgrade(w, r, nil)
-	if err != nil {
-		log.Println(err)
-		return
-	}
-	uid := FormatQuery(fmt.Sprintf("%v", r.URL), "uid")
-	c := &Client{
-		ID:   uid,
-		Conn: conn,
-	}
-	AllCh.JoinChan <- c
-	go c.ReadMsg()
-}
-
-func FormatQuery(url string, paramName string) string {
-	urls := strings.Split(url, "?")
-	strParam := urls[1]
-	strArr := strings.Split(strParam, "&")
-	OutMap := make(map[string]interface{})
-	if strArr[0] != "" && len(strArr) > 0 {
-		for _, str := range strArr {
-			newArr := strings.Split(str, "=")
-			key := newArr[0]
-			value := newArr[1]
-			OutMap[key] = value
-		}
-	}
-	return fmt.Sprintf("%v", OutMap[paramName])
-}
+var (
+	//go:embed web/view/*
+	viewFS embed.FS
+	//go:embed web/static/*
+	staticFS embed.FS
+)
 
 func main() {
-	var port = "8090"
-	http.HandleFunc("/ws", handler)
-	http.Handle("/", http.FileServer(http.Dir("")))
-	fmt.Println("http://localhost:" + port)
-	_ = http.ListenAndServe(":"+port, nil)
+	if err := run(); err != nil {
+		log.Fatalf("程序异常退出: %v", err)
+	}
+}
+
+func run() error {
+	configPath := flag.String("config", "", "外部配置文件路径（ini），也可用 GWS_CONFIG 环境变量指定；留空时依次查找 ./env.ini、./config/env.ini 与内嵌模板")
+	showVersion := flag.Bool("version", false, "打印版本号后退出")
+	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("go-websocket %s\n", version)
+		return nil
+	}
+
+	if err := config.Init(*configPath); err != nil {
+		return err
+	}
+	envMode := config.EnvMode()
+	gin.SetMode(envMode)
+
+	fmt.Printf("%s go-websocket %s（%s）\n", time.Now().Format(time.DateTime), version, envMode)
+	fmt.Println("配置来源:", config.Source())
+
+	// h.Close() 放在 serve 之后：先把监听停掉，再统一断开还挂着的 WebSocket。
+	// http.Server.Shutdown 只等普通请求，升级过的连接不在它的管理范围内。
+	h := handle.New(webSocketConfig())
+	defer h.Close()
+
+	engine, err := router.R(envMode, viewFS, staticFS, h)
+	if err != nil {
+		return err
+	}
+
+	port := config.GetString("server.http_port", "8090")
+	printAccessURLs(config.GetString("server.protocol", "http"), port)
+	return serve(engine, port)
+}
+
+// webSocketConfig 把配置文件里的 WebSocket 参数收集成 handle.Config。
+// 集中在一处，方便一眼看出「哪些配置项真的被用到了」。
+func webSocketConfig() handle.Config {
+	return handle.Config{
+		ReadBufferSize:  config.GetInt("websocket.read_buffer_size", 1024),
+		WriteBufferSize: config.GetInt("websocket.write_buffer_size", 1024),
+		MaxMessageSize:  config.GetInt64("websocket.max_message_size", 4096),
+		PingPeriod:      config.GetDuration("websocket.ping_period", 30*time.Second),
+		PongWait:        config.GetDuration("websocket.pong_wait", 60*time.Second),
+		WriteWait:       config.GetDuration("websocket.write_wait", 10*time.Second),
+		SendQueue:       config.GetInt("websocket.send_queue", 64),
+		AllowAllOrigins: config.GetBool("websocket.allow_all_origins", false),
+	}
+}
+
+// serve 启动 HTTP 服务，并在收到 Ctrl+C / SIGTERM 时优雅退出。
+func serve(engine *gin.Engine, port string) error {
+	srv := &http.Server{
+		Addr:    ":" + port,
+		Handler: engine,
+		// 只限制读请求头：WebSocket 是长连接，设了 ReadTimeout / WriteTimeout
+		// 会把正常的心跳和长会话一起掐断。
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	errCh := make(chan error, 1)
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			errCh <- fmt.Errorf("HTTP 服务启动失败: %w", err)
+		}
+	}()
+
+	select {
+	case err := <-errCh:
+		return err
+	case <-ctx.Done():
+		fmt.Println("收到退出信号，正在关闭服务...")
+	}
+
+	shutdownCtx, cancel := context.WithTimeout(context.Background(),
+		config.GetDuration("server.shutdown_timeout", 10*time.Second))
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		return fmt.Errorf("关闭 HTTP 服务失败: %w", err)
+	}
+	fmt.Println("服务已停止")
+	return nil
+}
+
+// printAccessURLs 打印可访问的地址，方便容器 / 局域网部署时直接复制。
+func printAccessURLs(protocol, port string) {
+	fmt.Printf("本机访问: %s://127.0.0.1:%s\n", protocol, port)
+
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		log.Printf("获取本机网络地址失败: %v", err)
+		return
+	}
+	for _, addr := range addrs {
+		ipNet, ok := addr.(*net.IPNet)
+		if !ok || ipNet.IP.IsLoopback() || ipNet.IP.To4() == nil {
+			continue
+		}
+		fmt.Printf("局域网访问: %s://%s:%s\n", protocol, ipNet.IP, port)
+	}
+	fmt.Println("WebSocket 与上述地址同端口，路径 /ws?uid=你的uid")
 }

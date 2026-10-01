@@ -1,1 +1,22 @@
-.idea
+# 本地直接 go build 产生的可执行文件
+/go-websocket
+/go-websocket.exe
+
+# 配置文件：仓库只提交各环境的模板，本地复制成 env.ini 覆盖即可
+/config/env.ini
+
+# 编辑器 / IDE
+.idea/
+.vscode/
+.DS_Store
+
+# 本地私有配置
+*.local.yml
+*.local.bat
+
+# 临时文件（提交信息等一次性草稿，别被 git add -A 带进仓库）
+*.tmp
+
+# test 目录只保留测试源码
+/test/*
+!/test/*_test.go

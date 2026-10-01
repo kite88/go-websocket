@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="color-scheme" content="light dark">
+    <title>WebSocket 定向聊天</title>
+    <link rel="icon" type="image/x-icon" href="/web/static/favicon.ico">
+    <script>
+        // 主题三态：light / system / dark，存在 localStorage 的 gws-theme 里。
+        // 这段必须放在样式表之前、且在首帧之前执行，否则暗色用户会先看到一瞬白屏（FOUC）。
+        (function () {
+            var mode = 'system';
+            try {
+                mode = localStorage.getItem('gws-theme') || 'system';
+            } catch (e) {
+                // 隐私模式等场景下 localStorage 不可用，按跟随系统处理
+            }
+            var dark = mode === 'dark' ||
+                (mode === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+            document.documentElement.setAttribute('data-bs-theme', dark ? 'dark' : 'light');
+        })();
+    </script>
+    <link rel="stylesheet" href="/web/static/bootstrap/v5.3.5/bootstrap.min.css">
+    <style>
+        /* 把 Bootstrap 的圆角变量调柔和一点，按钮 / 输入框 / 卡片 / 弹窗会一起变 */
+        :root {
+            --bs-border-radius: 0.625rem;
+        }
+
+        html,
+        body {
+            height: 100%;
+        }
+
+        body {
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+
+        a {
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .action-link,
+        .action-link:hover,
+        .action-link:focus {
+            text-decoration: none;
+            white-space: nowrap;
+        }
+
+        /* 复制成功后文字临时转绿 */
+        .copy-link.copied {
+            color: var(--bs-success);
+        }
+
+        /* ---------- 顶部一行：标题 / 连接状态 / 主题 ---------- */
+        .page-top {
+            max-width: 1280px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 18px 12px 6px;
+        }
+
+        .page-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .page-subtitle {
+            display: flex;
+            align-items: baseline;
+            gap: 6px;
+            flex-wrap: wrap;
+            color: var(--bs-secondary-color);
+            font-size: 0.8125rem;
+            margin-top: 3px;
+        }
+
+        .page-subtitle code {
+            color: inherit;
+        }
+
+        .theme-switch .btn.active {
+            color: var(--bs-btn-active-color, #fff);
+            background-color: var(--bs-primary);
+            border-color: var(--bs-primary);
+        }
+
+        /* ---------- 主体 ---------- */
+        .page-body {
+            max-width: 1280px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 12px;
+            flex: 1 1 auto;
+            min-height: 0;
+        }
+
+        .page-body .row {
+            height: 100%;
+        }
+
+        .panel {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            min-height: 0;
+        }
+
+        /* ---------- 在线列表 ---------- */
+        .online-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 8px;
+            cursor: pointer;
+            border: 0;
+            border-bottom: 1px solid var(--bs-border-color);
+            padding: 10px 14px;
+            background: transparent;
+            color: inherit;
+            width: 100%;
+            text-align: left;
+        }
+
+        .online-item:hover {
+            background-color: var(--bs-tertiary-bg);
+        }
+
+        .online-item.active {
+            background-color: var(--bs-primary-bg-subtle);
+        }
+
+        .online-item .uid {
+            font-family: var(--bs-font-monospace);
+            font-size: 0.8125rem;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* ---------- 消息区 ---------- */
+        .message-list {
+            flex: 1 1 auto;
+            min-height: 260px;
+            overflow-y: auto;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .bubble {
+            max-width: min(80%, 620px);
+            border-radius: 0.75rem;
+            padding: 8px 12px;
+            font-size: 0.875rem;
+            word-break: break-word;
+            white-space: pre-wrap;
+        }
+
+        .bubble .meta {
+            display: block;
+            font-size: 0.6875rem;
+            color: var(--bs-secondary-color);
+            margin-bottom: 2px;
+        }
+
+        .bubble.them {
+            align-self: flex-start;
+            background-color: var(--bs-secondary-bg);
+        }
+
+        .bubble.mine {
+            align-self: flex-end;
+            background-color: var(--bs-primary);
+            color: #fff;
+        }
+
+        .bubble.mine .meta {
+            color: rgba(255, 255, 255, 0.75);
+        }
+
+        /* 服务端提示（错误 / 系统消息）居中显示，不占气泡样式 */
+        .system-line {
+            align-self: center;
+            color: var(--bs-secondary-color);
+            font-size: 0.75rem;
+        }
+
+        .system-line.error {
+            color: var(--bs-danger);
+        }
+
+        .empty-hint {
+            color: var(--bs-secondary-color);
+            font-size: 0.875rem;
+            text-align: center;
+            margin: auto;
+        }
+    </style>
+</head>
+<body>
+<div class="page-top">
+    <div class="d-flex flex-wrap justify-content-between align-items-start gap-2">
+        <div>
+            <h1 class="page-title">WebSocket 定向聊天</h1>
+            <div class="page-subtitle">
+                <span>我的 uid：<code id="my-uid">-</code></span>
+                <a class="action-link copy-link" id="copy-uid">复制</a>
+                <a class="action-link" id="change-uid">更换</a>
+            </div>
+        </div>
+        <div class="d-flex align-items-center gap-3">
+            <span id="conn-status" class="badge text-bg-secondary">连接中…</span>
+            <div class="theme-switch btn-group btn-group-sm" role="group" aria-label="主题">
+                <button type="button" class="btn btn-outline-secondary" data-theme="light">亮色</button>
+                <button type="button" class="btn btn-outline-secondary" data-theme="system">跟随系统</button>
+                <button type="button" class="btn btn-outline-secondary" data-theme="dark">暗色</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="page-body">
+    <div class="row g-3">
+        <div class="col-12 col-lg-4 col-xl-3">
+            <div class="card panel">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>在线用户</span>
+                    <span class="badge text-bg-secondary" id="online-count">0</span>
+                </div>
+                <div class="card-body p-0 overflow-auto">
+                    <div id="online-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-lg-8 col-xl-9">
+            <div class="card panel">
+                <div class="card-header">
+                    与 <code id="peer-name">（未选择）</code> 的会话
+                </div>
+                <div class="message-list" id="messages">
+                    <div class="empty-hint" id="empty-hint">在左侧点一位在线用户，或直接填写接收人 uid</div>
+                </div>
+                <div class="card-footer">
+                    <form id="composer" class="row g-2 align-items-end">
+                        <div class="col-12 col-md-4 col-lg-3">
+                            <label class="form-label small mb-1" for="receiver">接收人 uid</label>
+                            <input type="text" class="form-control form-control-sm" id="receiver"
+                                   placeholder="对方的 uid" autocomplete="off">
+                        </div>
+                        <div class="col-12 col-md">
+                            <label class="form-label small mb-1" for="content">消息内容</label>
+                            <input type="text" class="form-control form-control-sm" id="content"
+                                   placeholder="回车发送" autocomplete="off">
+                        </div>
+                        <div class="col-12 col-md-auto">
+                            <button type="submit" class="btn btn-primary btn-sm w-100" id="send">发送</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="/web/static/jquery/jquery-3.7.1.min.js"></script>
+<script src="/web/static/bootstrap/v5.3.5/bootstrap.min.js"></script>
+<script src="/web/static/assets/js/app.js"></script>
+</body>
+</html>
