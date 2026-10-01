@@ -210,3 +210,7 @@ go test ./...   # 单元测试 + 进程内路由测试 + WebSocket 端到端测�
 > `httptest.NewRecorder` 做不到），用的是 `httptest.NewServer`，不占用固定端口。
 >
 > 想跑竞态检测需要 cgo（本机要有 gcc）：`CGO_ENABLED=1 go test -race ./...`。
+
+## 许可
+
+[MIT](LICENSE) © 2026 kite88

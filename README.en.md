@@ -250,3 +250,7 @@ and reconnecting after a disconnect.
 > fixed port is occupied.
 >
 > Running the race detector needs cgo (and a local gcc): `CGO_ENABLED=1 go test -race ./...`.
+
+## License
+
+[MIT](LICENSE) © 2026 kite88
