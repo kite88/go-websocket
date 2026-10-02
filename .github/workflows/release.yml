@@ -7,9 +7,9 @@ name: release
 # 产物（dist/checksums.txt）会先自检，通过后才发 Release。
 # 带后缀的标签（如 v1.1.0-rc1）会被标记为 prerelease，不会占用 Latest。
 #
-# Release 说明优先取 docs/release-notes/<tag>.md；没有该文件时用一段产物说明加
-# GitHub 自动生成的提交列表。标签已存在 Release 时会改为更新说明并覆盖产物，
-# 因此重打标签可以安全地重新发布。
+# Release 说明依次取 docs/release-notes/<tag>.md、CHANGELOG.md 里对应版本的段落，
+# 都没有时用一段产物说明加 GitHub 自动生成的提交列表。标签已存在 Release 时会改为
+# 更新说明并覆盖产物，因此重打标签可以安全地重新发布。
 
 on:
   push:
@@ -51,9 +51,22 @@ jobs:
           tag="${GITHUB_REF_NAME}"
           assets=(dist/go-websocket_* dist/checksums.txt)
 
+          # Release 说明的取值顺序：docs/release-notes/<tag>.md > CHANGELOG.md 里对应
+          # 版本的段落 > 一段产物说明加 GitHub 自动生成的提交列表
           notes_file="docs/release-notes/${tag}.md"
+          changelog_notes=$(mktemp)
+          awk -v tag="$tag" '
+            index($0, "## [" tag "]") == 1 { found = 1; next }
+            found && /^## / { exit }
+            found && /^\[[^]]+\]:/ { exit }
+            found { print }
+          ' CHANGELOG.md > "$changelog_notes" 2>/dev/null || true
+
           if [ -f "$notes_file" ]; then
             notes_args=(--notes-file "$notes_file")
+            auto_args=()
+          elif [ -s "$changelog_notes" ]; then
+            notes_args=(--notes-file "$changelog_notes")
             auto_args=()
           else
             notes_args=(--notes "页面、静态资源与配置模板都已内嵌进二进制，每个平台只需下载对应的单个文件：Windows 用 .exe，Linux / macOS 下载后 chmod +x 即可运行，不需要任何外部文件。checksums.txt 是全部产物的 SHA256，可用 sha256sum -c 校验。")
