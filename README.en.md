@@ -2,6 +2,9 @@
 
 # go-websocket · Targeted WebSocket Chat Service
 
+[![Release](https://img.shields.io/github/v/release/kite88/go-websocket)](https://github.com/kite88/go-websocket/releases/latest)
+[![License](https://img.shields.io/github/license/kite88/go-websocket)](LICENSE)
+
 A small service written in Go + Gin: a browser connects with a uid, and the server
 **delivers each message only to the user named in `receiver`** (it never broadcasts).
 The page template, the static assets and the config templates are all embedded into the
@@ -58,7 +61,10 @@ change directly, with no extra build or runtime dependencies.
 
 ## Quick Start
 
-Requires Go 1.23 or later.
+Requires Go 1.23 or later. If you would rather not install Go, grab a binary from
+[Releases](https://github.com/kite88/go-websocket/releases/latest): one single-file
+executable per platform, with the page, the static assets and the config all inside it —
+download and run (on Linux / macOS, `chmod +x` first).
 
 ```bash
 # Run directly (recommended: rerun after every edit, no files left behind)
@@ -250,6 +256,32 @@ and reconnecting after a disconnect.
 > fixed port is occupied.
 >
 > Running the race detector needs cgo (and a local gcc): `CGO_ENABLED=1 go test -race ./...`.
+
+## Releasing
+
+Release artifacts are produced by `build.sh`: one executable per platform in `dist/`, plus
+a `checksums.txt` with the SHA256 of every artifact.
+
+```bash
+./build.sh              # version comes from git describe --tags
+./build.sh -v v1.1.0    # or pass it explicitly
+```
+
+The script needs bash (Linux / macOS, or Git Bash / WSL on Windows). The version is injected
+into `main.version`, so `go-websocket -version` reports it.
+
+Publishing is just a tag: `.github/workflows/release.yml` reruns the same steps
+(`go vet` → `go test` → `build.sh` → verify the artifacts), creates the Release and uploads
+the artifacts.
+
+```bash
+git tag v1.1.0 && git push origin v1.1.0
+```
+
+A tag with a suffix (such as `v1.1.0-rc1`) is published as a prerelease and does not take
+over Latest; if the tag already has a Release, its notes are updated and the artifacts
+overwritten, so re-tagging is a safe way to republish. To write custom release notes, put
+them in `docs/release-notes/<tag>.md`.
 
 ## License
 

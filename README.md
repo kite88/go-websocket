@@ -2,6 +2,9 @@
 
 # go-websocket · WebSocket 定向聊天服务
 
+[![Release](https://img.shields.io/github/v/release/kite88/go-websocket)](https://github.com/kite88/go-websocket/releases/latest)
+[![License](https://img.shields.io/github/license/kite88/go-websocket)](LICENSE)
+
 用 Go + Gin 写的一个小服务：浏览器带上 uid 连上来，服务端按消息里的 `receiver`
 **精准投递**给某一个用户（不是广播）。页面模板、静态资源、配置模板都用 `//go:embed`
 内嵌在二进制里，**clone 下来 `go run .` 就能跑**，运行时不依赖任何外部文件。
@@ -45,7 +48,9 @@
 
 ## 快速开始
 
-需要 Go 1.23 及以上。
+需要 Go 1.23 及以上。不想装 Go 就直接下二进制：[Releases](https://github.com/kite88/go-websocket/releases/latest)
+里每个平台一个单文件可执行程序，页面、静态资源与配置都在里面，下载后直接运行
+（Linux / macOS 先 `chmod +x`）。
 
 ```bash
 # 直接跑（推荐，改完代码重跑即可，不产生文件）
@@ -210,6 +215,30 @@ go test ./...   # 单元测试 + 进程内路由测试 + WebSocket 端到端测�
 > `httptest.NewRecorder` 做不到），用的是 `httptest.NewServer`，不占用固定端口。
 >
 > 想跑竞态检测需要 cgo（本机要有 gcc）：`CGO_ENABLED=1 go test -race ./...`。
+
+## 发布
+
+发布产物由 `build.sh` 生成：每个平台一个可执行文件，落在 `dist/`，另附 `checksums.txt`
+记录全部产物的 SHA256。
+
+```bash
+./build.sh              # 版本号取自 git describe --tags
+./build.sh -v v1.1.0    # 也可以显式指定
+```
+
+脚本需要 bash（Linux / macOS，或 Windows 上的 Git Bash / WSL）。版本号会注入
+`main.version`，可用 `go-websocket -version` 核对。
+
+正式发版只需推一个标签，`.github/workflows/release.yml` 会重跑同一套流程
+（`go vet` → `go test` → `build.sh` → 校验产物），创建 Release 并上传产物：
+
+```bash
+git tag v1.1.0 && git push origin v1.1.0
+```
+
+带后缀的标签（如 `v1.1.0-rc1`）发布为 prerelease，不占用 Latest；标签已有 Release 时
+改为更新说明并覆盖产物，因此重打标签可以安全地重新发布。想自定义 Release 说明，
+把内容写到 `docs/release-notes/<标签>.md` 即可。
 
 ## 许可
 
