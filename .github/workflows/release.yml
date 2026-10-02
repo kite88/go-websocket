@@ -16,6 +16,12 @@ on:
     tags:
       - 'v*'
 
+# 同一个标签的多次触发改为排队执行：两条流水线并发上传时会互相 --clobber，
+# 顺序执行才能保证产物是最后一次完整上传的结果。
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write # gh release create / upload 需要写权限
 
