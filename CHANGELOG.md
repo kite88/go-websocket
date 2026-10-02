@@ -36,7 +36,9 @@
 - 版本号由构建时 `-ldflags "-X main.version=..."` 注入，源码直跑显示 `dev`。
 - 分层结构：`config` / `common` / `handle` / `router`，依赖通过参数显式注入，便于测试。
 - 以 MIT 许可开源，源码与发布产物均可自由使用、修改、分发。
-- `build.sh` 一次交叉编译 windows / linux / darwin 六个平台并生成 `checksums.txt`；
+- `build.sh` 一次交叉编译 windows / linux / darwin 六个平台并打包为归档
+  （Windows 为 `.zip`，其余为 `.tar.gz`），归档内是「可执行文件 + `start` 启动脚本 +
+  `env.ini` + `LICENSE`」，另有 `checksums.txt` 记录全部归档的 SHA256；
   推送 `v*` 标签时 GitHub Actions 自动重跑 `go vet` / `go test` / 构建 / 校验并创建 Release。
 
 ### 测试

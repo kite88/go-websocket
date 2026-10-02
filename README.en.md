@@ -61,10 +61,12 @@ change directly, with no extra build or runtime dependencies.
 
 ## Quick Start
 
-Requires Go 1.23 or later. If you would rather not install Go, grab a binary from
-[Releases](https://github.com/kite88/go-websocket/releases/latest): one single-file
-executable per platform, with the page, the static assets and the config all inside it —
-download and run (on Linux / macOS, `chmod +x` first).
+Requires Go 1.23 or later. If you would rather not install Go, grab the archive for your
+platform from [Releases](https://github.com/kite88/go-websocket/releases/latest):
+`.tar.gz` for Linux / macOS, `.zip` for Windows. Unpacking gives a ready-to-run directory
+(the executable, a `start` launcher, `env.ini`, `LICENSE`) — double-click `start.bat` on
+Windows, run `./start.sh` elsewhere, or just run the executable directly. The page and the
+static assets are embedded in the executable.
 
 ```bash
 # Run directly (recommended: rerun after every edit, no files left behind)
@@ -259,16 +261,21 @@ and reconnecting after a disconnect.
 
 ## Releasing
 
-Release artifacts are produced by `build.sh`: one executable per platform in `dist/`, plus
-a `checksums.txt` with the SHA256 of every artifact.
+Release artifacts are produced by `build.sh`: one archive per platform in `dist/`, plus a
+`checksums.txt` with the SHA256 of every archive.
 
 ```bash
 ./build.sh              # version comes from git describe --tags
 ./build.sh -v v1.1.0    # or pass it explicitly
 ```
 
-The script needs bash (Linux / macOS, or Git Bash / WSL on Windows). The version is injected
-into `main.version`, so `go-websocket -version` reports it.
+Each archive unpacks to a top-level `go-websocket-<os>-<arch>/` holding the executable,
+`start.sh` (or `start.bat` on Windows), `env.ini` and `LICENSE`. Windows gets a `.zip`, the
+other platforms get a `.tar.gz` whose executable and launcher carry the `0755` bit.
+
+The script needs bash (Linux / macOS, or Git Bash / WSL on Windows; Git Bash has no `zip`,
+so the script falls back to PowerShell's `Compress-Archive`). The version is injected into
+`main.version`, so `go-websocket -version` reports it.
 
 Publishing is just a tag: `.github/workflows/release.yml` reruns the same steps
 (`go vet` → `go test` → `build.sh` → verify the artifacts), creates the Release and uploads

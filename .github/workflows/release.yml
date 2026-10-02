@@ -55,7 +55,7 @@ jobs:
         run: |
           set -euo pipefail
           tag="${GITHUB_REF_NAME}"
-          assets=(dist/go-websocket_* dist/checksums.txt)
+          assets=(dist/*.zip dist/*.tar.gz dist/checksums.txt)
 
           # Release 说明的取值顺序：docs/release-notes/<tag>.md > CHANGELOG.md 里对应
           # 版本的段落 > 一段产物说明加 GitHub 自动生成的提交列表
@@ -75,7 +75,7 @@ jobs:
             notes_args=(--notes-file "$changelog_notes")
             auto_args=()
           else
-            notes_args=(--notes "页面、静态资源与配置模板都已内嵌进二进制，每个平台只需下载对应的单个文件：Windows 用 .exe，Linux / macOS 下载后 chmod +x 即可运行，不需要任何外部文件。checksums.txt 是全部产物的 SHA256，可用 sha256sum -c 校验。")
+            notes_args=(--notes "Linux / macOS 用户下载 .tar.gz，Windows 用户下载 .zip，解压后即为可直接运行的目录（可执行文件 + start 启动脚本 + env.ini + LICENSE），页面与静态资源都已内嵌在可执行文件里，没有配置文件也能跑。checksums.txt 是全部归档的 SHA256，可用 sha256sum -c 校验。")
             auto_args=(--generate-notes)
           fi
 

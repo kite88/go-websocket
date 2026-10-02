@@ -48,9 +48,11 @@
 
 ## 快速开始
 
-需要 Go 1.23 及以上。不想装 Go 就直接下二进制：[Releases](https://github.com/kite88/go-websocket/releases/latest)
-里每个平台一个单文件可执行程序，页面、静态资源与配置都在里面，下载后直接运行
-（Linux / macOS 先 `chmod +x`）。
+需要 Go 1.23 及以上。不想装 Go 就去 [Releases](https://github.com/kite88/go-websocket/releases/latest)
+下载对应平台的压缩包：Linux / macOS 取 `.tar.gz`，Windows 取 `.zip`，解压后即为可直接
+运行的目录（可执行文件、启动脚本、`env.ini`、`LICENSE`）——Windows 双击 `start.bat`，
+其余平台 `./start.sh`，也可以直接运行目录里的可执行文件。页面与静态资源都已内嵌在
+可执行文件里。
 
 ```bash
 # 直接跑（推荐，改完代码重跑即可，不产生文件）
@@ -218,16 +220,21 @@ go test ./...   # 单元测试 + 进程内路由测试 + WebSocket 端到端测�
 
 ## 发布
 
-发布产物由 `build.sh` 生成：每个平台一个可执行文件，落在 `dist/`，另附 `checksums.txt`
-记录全部产物的 SHA256。
+发布产物由 `build.sh` 生成：每个平台一个归档，落在 `dist/`，另附 `checksums.txt`
+记录全部归档的 SHA256。
 
 ```bash
 ./build.sh              # 版本号取自 git describe --tags
 ./build.sh -v v1.1.0    # 也可以显式指定
 ```
 
-脚本需要 bash（Linux / macOS，或 Windows 上的 Git Bash / WSL）。版本号会注入
-`main.version`，可用 `go-websocket -version` 核对。
+归档的顶层目录是 `go-websocket-<os>-<arch>/`，里面是可执行文件、`start.sh`
+（Windows 为 `start.bat`）、`env.ini` 与 `LICENSE`；Windows 打成 `.zip`，其余平台打成
+`.tar.gz`，非 Windows 归档里的可执行文件与启动脚本带 `0755` 权限。
+
+脚本需要 bash（Linux / macOS，或 Windows 上的 Git Bash / WSL；Git Bash 不自带 `zip`，
+脚本会自动退回 PowerShell 的 `Compress-Archive`）。版本号会注入 `main.version`，
+可用 `go-websocket -version` 核对。
 
 正式发版只需推一个标签，`.github/workflows/release.yml` 会重跑同一套流程
 （`go vet` → `go test` → `build.sh` → 校验产物），创建 Release 并上传产物：
