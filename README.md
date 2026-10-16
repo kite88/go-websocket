@@ -1,6 +1,6 @@
 简体中文 · [English](README.en.md)
 
-# Go WebSocket · WebSocket 定向聊天服务
+# Go-WebSocket · WebSocket 定向聊天服务
 
 [![Release](https://img.shields.io/github/v/release/kite88/go-websocket)](https://github.com/kite88/go-websocket/releases/latest)
 [![License](https://img.shields.io/github/license/kite88/go-websocket)](LICENSE)
