@@ -1,6 +1,6 @@
 [简体中文](README.md) · English
 
-# Go WebSocket · Targeted WebSocket Chat Service
+# Go-WebSocket · Targeted WebSocket Chat Service
 
 [![Release](https://img.shields.io/github/v/release/kite88/go-websocket)](https://github.com/kite88/go-websocket/releases/latest)
 [![License](https://img.shields.io/github/license/kite88/go-websocket)](LICENSE)
